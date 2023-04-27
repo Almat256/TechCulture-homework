@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.9;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract NFFTishka is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
+    using Counters for Counters.Counter;
+
+    Counters.Counter private _tokenIdCounter;
+
+    constructor() ERC721("NFFTishka", "NFFT") {}
+
+    function _baseURI() internal pure override returns (string memory) {
+        return "ipfs://bafkreiavmbiesn4aecewt7pjdvckl2kusqbgpc25nbv3n35x2xbcsacagy";
+    }
+
+    function safeMint(address to, string memory uri) public onlyOwner {
+        uint256 tokenId = _tokenIdCounter.current();
+        _tokenIdCounter.increment();
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, uri);
+    }
+
+    struct Item {
+        address seller;
+        uint256 price;
+        bool isForSale;
+    }
+    mapping(uint256 => Item) public items;
+
+        event ItemListed(uint256 indexed itemId, uint256 price, address indexed seller);
+        event ItemSold(uint256 indexed itemId, uint256 price, address indexed seller, address indexed buyer);
+        event ItemSaleCancelled(uint256 indexed itemId, address indexed seller);
+
+    function createItem() public {
+        safeMint(msg.sender, "");
+    }
+    function listItem(uint256 _id, uint256 _price) public {
+        require(ownerOf(_id) == msg.sender, "Only the owner can list this item");
+        require(!items[_id].isForSale, "Item is already listed for sale");
+        items[_id] = Item(msg.sender, _price, true);
+        emit ItemListed(_id, _price, msg.sender);
+    }
+
+    function buyItem(uint256 _id) public payable {
+        require(items[_id].isForSale, "Item is not for sale");
+        require(msg.value >= items[_id].price, "Insufficient payment");
+        address seller = items[_id].seller;
+        uint256 price = items[_id].price;
+
+     delete items[_id];
+
+     emit ItemSold(_id, price, seller, msg.sender);
+
+     payable(seller).transfer(price);
+
+     if (msg.value > price) {
+        payable(msg.sender).transfer(msg.value - price);
+     }
+
+     safeTransferFrom(seller, msg.sender, _id);
+    }
+    function cancel(uint256 _id) public {
+        require(ownerOf(_id) == msg.sender, "Only the owner can cancel sale for this item");
+        require(items[_id].isForSale, "Item is not listed for sale");
+        delete items[_id];
+        emit ItemSaleCancelled(_id, msg.sender);
+    }  
+        
+    // The following functions are overrides required by Solidity.
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+        internal
+        override(ERC721, ERC721Enumerable)
+    {
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        super._burn(tokenId);
+    }
+
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (string memory)
+    {
+        return super.tokenURI(tokenId);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+    
+}
